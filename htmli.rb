@@ -74,32 +74,33 @@ extend self
   end
 
   def format tree, **opts
-    opts = {out:$>, separator: "\n", indent: "  ", level: 0, prev:[]}.merge opts
+    opts = {out: $>, separator: "\n", indent: "  ", level: 0, context:{}}.merge opts
+    out,separator,context = opts.values_at(:out, :separator, :context)
     indent = opts[:indent] * opts[:level]
     case tree
     when String
-      tree.each_line { |l| opts[:out] << indent << l }
-      opts[:prev][0] = tree[-1]
+      tree.each_line { |l| out << indent << l }
+      context[:lastchr] = tree[-1]
     when Array
       cat = tree[0][0]
       case cat
       when :root
         tree[1..-1].each { |t| format t, **opts }
       when :void, :singleton
-        opts[:out] << " <#{tree[0][1..-1].compact.join(" ")}#{cat == :singleton ? "/" : ""}> "
+        out << " <#{tree[0][1..-1].compact.join(" ")}#{cat == :singleton ? "/" : ""}> "
       when :tag
-        opts[:out] << opts[:separator] unless [opts[:separator], nil].include? opts[:prev][0]
-        opts[:out] << indent << "<#{tree[0][1..-1].compact.join(" ")}>" << opts[:separator]
-        opts[:prev].clear
+        out << separator unless [separator, nil].include? context[:lastchr]
+        out << indent << "<#{tree[0][1..-1].compact.join(" ")}>" << separator
+        context[:lastchr] = nil
         tree[1..-1].each { |t| format t, **opts.merge(level: opts[:level]+1) }
-        opts[:out] << opts[:separator] unless [opts[:separator], nil].include? opts[:prev][0]
-        opts[:out] << indent << "</#{tree[0][1]}>" << opts[:separator]
+        out << separator unless [separator, nil].include? context[:lastchr]
+        out << indent << "</#{tree[0][1]}>" << separator
       else
         raise "unknown token category #{cat}"
       end
-      opts[:prev].clear
+      context[:lastchr] = nil
     end
-    opts[:out]
+    out
   end
 
 end
