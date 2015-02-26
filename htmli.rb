@@ -1,0 +1,119 @@
+#!/usr/bin/env ruby
+
+module HTMLi
+extend self
+
+  def tokenize doc
+    tokens = []
+    loop do
+      i = doc.index /\s*</m
+      unless i
+        tokens << [:str, doc] unless doc.empty?
+        break
+      end
+      tokens << [:str, doc[0...i]] unless i.zero?
+      doc = doc[i..-1]
+      fulltag, closing, tagname, attr, singleton = %r@\A\s*<(/)?\s*(\w+)(?:\s+([^>]*[^>\s]))?\s*(/)?>\s*@m.match(doc).to_a
+      raise "#{fulltag.strip}: invalid tag" if (singleton or attr) and closing
+      tokens << if closing
+        [:tagclose, tagname]
+      else
+        [singleton ? :tagsingleton : :tagopen, tagname, attr]
+      end
+      doc = doc[fulltag.size..-1]
+    end
+    tokens
+  end
+
+  def sanitize tokens
+    tstack = []
+    voids = []
+    tokens.each { |t|
+      case t[0]
+      when :str,:tagsingleton
+      when :tagopen
+        tstack << t
+      when :tagclose
+        while to = tstack.pop
+          break if to[1] == t[1]
+          voids << to
+        end
+        raise "missing opening for #{t[1]}" unless to
+      else
+        raise "unknown token category #{t[0]}"
+      end
+    }
+    voids.concat tstack
+    voids.each { |t| t[0] = :tagvoid }
+    tokens
+  end
+
+  def mktree tokens
+    tree = [[:root]]
+    cursor = [tree]
+    tokens.each { |t|
+      cat = t[0]
+      cont = t[1..-1]
+      if cat == :tagclose
+        raise "tag mismatch: #{cursor[-1][0]} closed by #{t}" unless cursor[-1][0][1..1] == cont
+        cursor.pop
+      else
+        cursor[-1] << case cat
+        when :str
+          t[1]
+        when :tagsingleton, :tagvoid
+          [[cat.to_s.sub(/^tag/,"").to_sym] + cont]
+        when :tagopen
+          cursor << [[:tag] + cont]
+          cursor[-1]
+        end
+      end
+    }
+    raise "non-sanitized tokens" unless cursor == [tree]
+    tree
+  end
+
+  def format tree, **opts
+    opts = {out:$>, separator: "\n", indent: "  ", level: 0, prev:[]}.merge opts
+    indent = opts[:indent] * opts[:level]
+    case tree
+    when String
+      tree.each_line { |l| opts[:out] << indent << l }
+      opts[:prev][0] = tree[-1]
+    when Array
+      cat = tree[0][0]
+      case cat
+      when :root
+        tree[1..-1].each { |t| format t, **opts }
+      when :void, :singleton
+        opts[:out] << " <#{tree[0][1..-1].compact.join(" ")}#{cat == :singleton ? "/" : ""}> "
+      when :tag
+        opts[:out] << opts[:separator] unless [opts[:separator], nil].include? opts[:prev][0]
+        opts[:out] << indent << "<#{tree[0][1..-1].compact.join(" ")}>" << opts[:separator]
+        opts[:prev].clear
+        tree[1..-1].each { |t| format t, **opts.merge(level: opts[:level]+1) }
+        opts[:out] << opts[:separator] unless [opts[:separator], nil].include? opts[:prev][0]
+        opts[:out] << indent << "</#{tree[0][1]}>" << opts[:separator]
+      else
+        raise "unknown token category #{cat}"
+      end
+      opts[:prev].clear
+    end
+    opts[:out]
+  end
+
+end
+
+
+if __FILE__ == $0
+  include HTMLi
+
+  opts = {}
+  $*.each { |a|
+    if a =~ /\A(?:--)?([^=:]+)[=:](.*)/
+     opts[$1.to_sym] = $2
+    end
+  }
+
+  format mktree(sanitize(tokenize(STDIN.read))), **opts
+end
