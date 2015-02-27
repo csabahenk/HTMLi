@@ -79,26 +79,42 @@ extend self
     indent = opts[:indent] * opts[:level]
     case tree
     when String
-      tree.each_line { |l| out << indent << l }
-      context[:lastchr] = tree[-1]
+      out << " " if %i[void singleton tag].include? context[:lasttype] and context[:lastchr] != separator
+      tree.each_line { |l|
+        out << indent if context[:lastchr] == separator
+        out << l
+        context[:lastchr] = l[-1]
+      }
+      context[:lasttype] = String
     when Array
       cat = tree[0][0]
       case cat
       when :root
         tree[1..-1].each { |t| format t, **opts }
       when :void, :singleton
-        out << " <#{tree[0][1..-1].compact.join(" ")}#{cat == :singleton ? "/" : ""}> "
-      when :tag
-        out << separator unless [separator, nil].include? context[:lastchr]
-        out << indent << "<#{tree[0][1..-1].compact.join(" ")}>" << separator
+        out << if context[:lastchr] == separator
+          indent
+        elsif context[:lasttype] == String and context[:lastchr] !~ /\s/
+          " "
+        else
+          ""
+        end
+        out << "<#{tree[0][1..-1].compact.join(" ")}#{cat == :singleton ? "/" : ""}>"
         context[:lastchr] = nil
+      when :tag
+        if context.key? :lastchr and context[:lastchr] != separator
+          out << separator
+        end
+        out << indent << "<#{tree[0][1..-1].compact.join(" ")}>" << separator
+        context.merge! lastchr: separator, lasttype: cat
         tree[1..-1].each { |t| format t, **opts.merge(level: opts[:level]+1) }
-        out << separator unless [separator, nil].include? context[:lastchr]
+        out << separator unless context[:lastchr] == separator
         out << indent << "</#{tree[0][1]}>" << separator
+        context[:lastchr] = separator
       else
         raise "unknown token category #{cat}"
       end
-      context[:lastchr] = nil
+      context[:lasttype] = cat
     end
     out
   end
