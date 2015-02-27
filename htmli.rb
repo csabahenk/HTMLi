@@ -73,9 +73,19 @@ extend self
     tree
   end
 
+  def calc_height tree, intra=false
+    return 0 if String === tree
+    ha = []
+    tree[1].each { |t|
+      ha << calc_height(t, true)
+    }
+    tree[2] = (ha.max||0) + 1
+    intra ? tree[2] : tree
+  end
+
   def format tree, **opts
-    opts = {out: $>, separator: "\n", indent: "  ", level: 0, context:{}}.merge opts
-    out,separator,context = opts.values_at(:out, :separator, :context)
+    opts = {out: $>, separator: "\n", indent: "  ", collapse: 2, level: 0, context:{}}.merge opts
+    out,separator,collapse,context = opts.values_at(:out, :separator, :collapse, :context)
     indent = opts[:indent] * opts[:level]
     case tree
     when String
@@ -86,23 +96,39 @@ extend self
       }
     when Array
       cat = tree[0][0]
+      indenting = proc { out << indent if context[:lastchr] == separator }
       case cat
       when :root
         tree[1].each { |t| format t, **opts }
       when :void, :singleton
-        out << indent if context[:lastchr] == separator
+        indenting[]
         out << "<#{tree[0][1..-1].compact.join(" ")}#{cat == :singleton ? "/" : ""}>"
         context[:lastchr] = nil
       when :tag
-        if context.key? :lastchr and context[:lastchr] != separator
-          out << separator
+        descending = proc { tree[1].each { |t| format t, **opts.merge(level: opts[:level]+1) } }
+        if tree[2] and tree[2] <= collapse
+          indenting[]
+          out << "<#{tree[0][1..-1].compact.join(" ")}>"
+          context[:lastchr] = nil
+          descending[]
+          indenting[]
+          out << "</#{tree[0][1]}>"
+          context[:lastchr] = nil
+        else
+          if context.key? :lastchr and context[:lastchr] != separator
+            out << separator
+            context[:lastchr] = separator
+          end
+          indenting[]
+          out << "<#{tree[0][1..-1].compact.join(" ")}>" << separator
+          descending[]
+          unless context[:lastchr] == separator
+            out << separator
+            context[:lastchr] = separator
+          end
+          indenting[]
+          out << "</#{tree[0][1]}>" << separator
         end
-        out << indent << "<#{tree[0][1..-1].compact.join(" ")}>" << separator
-        context[:lastchr] = separator
-        tree[1].each { |t| format t, **opts.merge(level: opts[:level]+1) }
-        out << separator unless context[:lastchr] == separator
-        out << indent << "</#{tree[0][1]}>" << separator
-        context[:lastchr] = separator
       else
         raise "unknown token category #{cat}"
       end
@@ -119,9 +145,13 @@ if __FILE__ == $0
   opts = {}
   $*.each { |a|
     if a =~ /\A(?:--)?([^=:]+)[=:](.*)/
-     opts[$1.to_sym] = $2
+      opts[$1.to_sym] = begin
+        Integer $2
+      rescue ArgumentError
+        $2
+      end
     end
   }
 
-  format mktree(sanitize(tokenize(STDIN.read))), **opts
+  format calc_height(mktree(sanitize(tokenize(STDIN.read)))), **opts
 end
