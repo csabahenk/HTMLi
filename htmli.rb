@@ -6,14 +6,14 @@ extend self
   def tokenize doc
     tokens = []
     loop do
-      i = doc.index /\s*</m
+      i = doc.index /</m
       unless i
-        tokens << [:str, doc] unless doc.empty?
+        tokens << [:str, doc] unless doc =~ /\A\s*\Z/m
         break
       end
-      tokens << [:str, doc[0...i]] unless i.zero?
+      tokens << [:str, doc[0...i].sub(/\A\s+/m, " ").sub(/\s+\Z/m, " ")] unless doc[0...i] =~ /\A\s*\Z/m
       doc = doc[i..-1]
-      fulltag, closing, tagname, attr, singleton = %r@\A\s*<(/)?\s*(\w+)(?:\s+([^>]*[^>\s]))?\s*(/)?>\s*@m.match(doc).to_a
+      fulltag, closing, tagname, attr, singleton = %r@\A<(/)?\s*(\w+)(?:\s+([^>]*[^>\s]))?\s*(/)?>@m.match(doc).to_a
       raise "#{fulltag.strip}: invalid tag" if (singleton or attr) and closing
       tokens << if closing
         [:tagclose, tagname]
@@ -79,26 +79,18 @@ extend self
     indent = opts[:indent] * opts[:level]
     case tree
     when String
-      out << " " if %i[void singleton tag].include? context[:lasttype] and context[:lastchr] != separator
       tree.each_line { |l|
         out << indent if context[:lastchr] == separator
         out << l
         context[:lastchr] = l[-1]
       }
-      context[:lasttype] = String
     when Array
       cat = tree[0][0]
       case cat
       when :root
         tree[1..-1].each { |t| format t, **opts }
       when :void, :singleton
-        out << if context[:lastchr] == separator
-          indent
-        elsif context[:lasttype] == String and context[:lastchr] !~ /\s/
-          " "
-        else
-          ""
-        end
+        out << indent if context[:lastchr] == separator
         out << "<#{tree[0][1..-1].compact.join(" ")}#{cat == :singleton ? "/" : ""}>"
         context[:lastchr] = nil
       when :tag
@@ -106,7 +98,7 @@ extend self
           out << separator
         end
         out << indent << "<#{tree[0][1..-1].compact.join(" ")}>" << separator
-        context.merge! lastchr: separator, lasttype: cat
+        context[:lastchr] = separator
         tree[1..-1].each { |t| format t, **opts.merge(level: opts[:level]+1) }
         out << separator unless context[:lastchr] == separator
         out << indent << "</#{tree[0][1]}>" << separator
@@ -114,7 +106,6 @@ extend self
       else
         raise "unknown token category #{cat}"
       end
-      context[:lasttype] = cat
     end
     out
   end
