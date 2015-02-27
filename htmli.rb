@@ -49,7 +49,7 @@ extend self
   end
 
   def mktree tokens
-    tree = [[:root]]
+    tree = [[:root], []]
     cursor = [tree]
     tokens.each { |t|
       cat = t[0]
@@ -58,13 +58,13 @@ extend self
         raise "tag mismatch: #{cursor[-1][0]} closed by #{t}" unless cursor[-1][0][1..1] == cont
         cursor.pop
       else
-        cursor[-1] << case cat
+        cursor[-1][1] << case cat
         when :str
           t[1]
         when :tagsingleton, :tagvoid
-          [[cat.to_s.sub(/^tag/,"").to_sym] + cont]
+          [[cat.to_s.sub(/^tag/,"").to_sym] + cont, []]
         when :tagopen
-          cursor << [[:tag] + cont]
+          cursor << [[:tag] + cont, []]
           cursor[-1]
         end
       end
@@ -88,7 +88,7 @@ extend self
       cat = tree[0][0]
       case cat
       when :root
-        tree[1..-1].each { |t| format t, **opts }
+        tree[1].each { |t| format t, **opts }
       when :void, :singleton
         out << indent if context[:lastchr] == separator
         out << "<#{tree[0][1..-1].compact.join(" ")}#{cat == :singleton ? "/" : ""}>"
@@ -99,7 +99,7 @@ extend self
         end
         out << indent << "<#{tree[0][1..-1].compact.join(" ")}>" << separator
         context[:lastchr] = separator
-        tree[1..-1].each { |t| format t, **opts.merge(level: opts[:level]+1) }
+        tree[1].each { |t| format t, **opts.merge(level: opts[:level]+1) }
         out << separator unless context[:lastchr] == separator
         out << indent << "</#{tree[0][1]}>" << separator
         context[:lastchr] = separator
