@@ -73,20 +73,12 @@ extend self
 
   class StandardLayout < LayoutBase
 
-    def initialize category, tag, attr:nil, content:[], height:nil
-      @tree = [self.class.makehead(category, tag, attr), content] + [height].compact
+    def initialize category, tag, attr:nil, content:[]
+      @tree = [self.class.makehead(category, tag, attr), content]
     end
 
     def content
       tree[1]
-    end
-
-    def height
-      tree[2]
-    end
-
-    def height= n
-      tree[2] = n
     end
 
     def << e
@@ -97,20 +89,12 @@ extend self
 
   class InlineLayout < LayoutBase
 
-    def initialize category, tag, attr:nil, content:[], height:nil
-      @tree = [self.class.makehead(category, tag, attr)] + content + [height].compact
+    def initialize category, tag, attr:nil, content:[]
+      @tree = [self.class.makehead(category, tag, attr)] + content
     end
 
     def content
       tree[1..-1].select { |e| [Array, String].include? e.class }
-    end
-
-    def height
-      tree[1..-1].find { |e| Integer === e }
-    end
-
-    def height= n
-      tree << n
     end
 
     def << e
@@ -202,15 +186,24 @@ extend self
     tree.tree
   end
 
-  def calc_height tree, intra=false, layout: nil
-    return 0 if String === tree
-    tree = findlayout tree, layout: layout
-    ha = []
-    tree.content.each { |t|
-      ha << calc_height(t, true, layout: layout)
-    }
-    tree.height = (ha.max||0) + 1
-    intra ? tree.height : tree.tree
+  def tag_height tree, layout: nil
+    unless tree.respond_to? :height=
+      class << tree
+        attr_accessor :height
+      end
+    end
+    tree.height = case tree
+    when String
+      0
+    when Array
+      (findlayout(tree, layout: layout).content.map { |t|
+         tag_height(t, layout: layout)
+         t.height
+       }.max || 0) + 1
+    else
+      raise "invalid tree #{tree}"
+    end
+    tree
   end
 
   def format tree, **opts
@@ -237,7 +230,14 @@ extend self
         context[:lastchr] = nil
       when "tag"
         descending = proc { tree.content.each { |t| format t, **opts.merge(level: opts[:level]+1) } }
-        if tree.height and tree.height <= collapse
+        height = nil
+        [tree, tree.tree].each { |t|
+          if t.respond_to? :height
+            height = t.height
+            break
+          end
+        }
+        if height and height <= collapse
           indenting[]
           out << "<#{[tree.tag, tree.attr].compact.join(" ")}>"
           context[:lastchr] = nil
@@ -314,7 +314,7 @@ if __FILE__ == $0
     require 'yajl'
     Yajl::Encoder.encode tree, $>
   when "html", nil
-    format calc_height(tree), **opts
+    format tag_height(tree), **opts
   else
     raise "unknown format #{format}"
   end
