@@ -14,12 +14,21 @@ extend self
       end
       tokens << [:str, doc[0...i].sub(/\A\s+/m, " ").sub(/\s+\Z/m, " ")] unless doc[0...i] =~ /\A\s*\Z/m
       doc = doc[i..-1]
-      fulltag, closing, tagname, attr, singleton = %r@\A<(/)?\s*(\w+)(?:\s+([^>]*[^>\s]))?\s*(/)?>@m.match(doc).to_a
-      raise "#{fulltag.strip}: invalid tag" if (singleton or attr) and closing
-      tokens << if closing
-        [:tagclose, tagname]
+      fulltag, comment = %r@\A<!--(.+?)-->@m.match(doc).to_a
+      if fulltag
+        tokens << [:comment, comment]
       else
-        [singleton ? :tagsingleton : :tagopen, tagname] + [attr].compact
+        fulltag, declaration = %r@\A<!([^>]*)>@m.match(doc).to_a
+        tokens << [:declaration, declaration] if fulltag
+      end
+      unless fulltag
+        fulltag, closing, tagname, attr, singleton = %r@\A<(/)?\s*(\w+)(?:\s+([^>]*[^>\s]))?\s*(/)?>@m.match(doc).to_a
+        raise "#{fulltag.strip}: invalid tag" if (singleton or attr) and closing
+        tokens << if closing
+          [:tagclose, tagname]
+        else
+          [singleton ? :tagsingleton : :tagopen, tagname] + [attr].compact
+        end
       end
       doc = doc[fulltag.size..-1]
     end
@@ -31,7 +40,7 @@ extend self
     voids = []
     tokens.each { |t|
       case t[0]
-      when :str,:tagsingleton
+      when :str,:tagsingleton,:comment,:declaration
       when :tagopen
         tstack << t
       when :tagclose
@@ -174,7 +183,7 @@ extend self
         cursor[-1] << case cat
         when :str
           payload[0]
-        when :tagsingleton, :tagvoid
+        when :tagsingleton, :tagvoid, :declaration, :comment
           _LO.new(cat.to_s.sub(/^tag/,"").to_sym, payload[0], attr: payload[1]).tree
         when :tagopen
           cursor << _LO.new(:tag, payload[0], attr: payload[1])
@@ -228,6 +237,11 @@ extend self
         indenting[]
         out << "<#{[tree.tag, tree.attr].compact.join(" ")}#{cat == :singleton ? "/" : ""}>"
         context[:lastchr] = nil
+      when "declaration", "comment"
+        marker = cat.to_s == "comment" ? "--" : ""
+        indenting[]
+        out << "<!#{marker}#{tree.tag}#{marker}>" << separator
+        context[:lastchr] = separator
       when "tag"
         descending = proc { tree.content.each { |t| format t, **opts.merge(level: opts[:level]+1) } }
         height = nil
