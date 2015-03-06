@@ -4,34 +4,68 @@
 module HTMLi
 extend self
 
-  def tokenize doc
-    tokens = []
+  def pretokenize src
+    tok = ""
+    cat = :str
+    eci = src.instance_eval { respond_to?(:each_char) ? each_char : each }
     loop do
-      i = doc.index /</m
-      unless i
-        tokens << [:str, doc] unless doc =~ /\A\s*\Z/m
+      begin
+        c = eci.next
+        if c == "<" and cat == :str
+          yield cat, tok unless tok =~ /\A\s*\Z/m
+          tok = c
+          cat = :tag
+          %w[! - -].each { |q|
+            tok << eci.next
+            break unless tok[-1] == q
+          }
+          if tok[-3..-1] == "!--"
+            cat = :comment
+          elsif tok[-1] == ">"
+            yield cat, tok
+            tok = ""
+            cat = :str
+          end
+        else
+          tok << c
+          if (cat == :tag and tok[-1] == ">") or
+             # XXX with this, truncated comments like
+             # <!---> are also considered to be comments
+             # but <!-- -- > is missed out
+             (cat == :comment and tok[-3..-1] == "-->")
+            yield cat, tok
+            tok = ""
+            cat = :str
+          end
+        end
+      rescue StopIteration
+        yield cat, tok unless tok =~ /\A\s*\Z/m
         break
       end
-      tokens << [:str, doc[0...i].sub(/\A\s+/m, " ").sub(/\s+\Z/m, " ")] unless doc[0...i] =~ /\A\s*\Z/m
-      doc = doc[i..-1]
-      fulltag, comment = %r@\A<!--(.+?)-->@m.match(doc).to_a
-      if fulltag
-        tokens << [:comment, comment]
-      else
-        fulltag, declaration = %r@\A<!([^>]*)>@m.match(doc).to_a
-        tokens << [:declaration, declaration] if fulltag
-      end
-      unless fulltag
-        fulltag, closing, tagname, attr, singleton = %r@\A<(/)?\s*(\w+)(?:\s+([^>]*[^>\s]))?\s*(/)?>@m.match(doc).to_a
-        raise "#{fulltag.strip}: invalid tag" if (singleton or attr) and closing
-        tokens << if closing
-          [:tagclose, tagname]
+    end
+  end
+
+  def tokenize src
+    tokens = []
+    pretokenize(src) { |cat, tok|
+      tokens << case cat
+      when :str
+        [cat, tok.sub(/\A\s+/m, " ").sub(/\s+\Z/m, " ")]
+      when :comment
+        [cat, tok[4..-4]]
+      when :tag
+        case tok[1]
+        when "!"
+          [:declaration, tok[2..-2]]
+        when "/"
+          [:tagclose, tok[2...-1].strip]
         else
-          [singleton ? :tagsingleton : :tagopen, tagname] + [attr].compact
+          cat,i = tok[-2] == "/" ? [:tagsingleton, -2] : [:tagopen, -1]
+          tag, attr = tok[1...i].split(/\s+/m, 2).map(&:strip)
+          [cat, tag] + [attr].compact
         end
       end
-      doc = doc[fulltag.size..-1]
-    end
+    }
     tokens
   end
 
@@ -308,13 +342,16 @@ if __FILE__ == $0
 
   $*.insert(0, args).flatten!
 
-  doc = $<.read
   layout = opts.delete :layout
-  tree = begin
+  from = opts.delete :from
+  tree = case from
+  when "html", nil
+    mktree sanitize(tokenize($<)), layout: layout
+  when "json"
     require 'json'
-    JSON.load doc
-  rescue
-    mktree sanitize(tokenize(doc)), layout: layout
+    JSON.load $<
+  else
+    raise "unknown input format #{from}"
   end
 
   case opts.delete :format
