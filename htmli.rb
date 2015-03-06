@@ -55,8 +55,6 @@ extend self
         [cat, tok[4..-4]]
       when :tag
         case tok[1]
-        when "!"
-          [:declaration, tok[2..-2]]
         when "/"
           [:tagclose, tok[2...-1].strip]
         else
@@ -74,7 +72,7 @@ extend self
     voids = []
     tokens.each { |t|
       case t[0]
-      when :str,:tagsingleton,:comment,:declaration
+      when :str,:tagsingleton,:comment
       when :tagopen
         tstack << t
       when :tagclose
@@ -217,7 +215,7 @@ extend self
         cursor[-1] << case cat
         when :str
           payload[0]
-        when :tagsingleton, :tagvoid, :declaration, :comment
+        when :tagsingleton, :tagvoid, :comment
           _LO.new(cat.to_s.sub(/^tag/,"").to_sym, payload[0], attr: payload[1]).tree
         when :tagopen
           cursor << _LO.new(:tag, payload[0], attr: payload[1])
@@ -271,10 +269,9 @@ extend self
         indenting[]
         out << "<#{[tree.tag, tree.attr].compact.join(" ")}#{cat == :singleton ? "/" : ""}>"
         context[:lastchr] = nil
-      when "declaration", "comment"
-        marker = cat.to_s == "comment" ? "--" : ""
+      when "comment"
         indenting[]
-        out << "<!#{marker}#{tree.tag}#{marker}>" << separator
+        out << "<!--#{tree.tag}-->" << separator
         context[:lastchr] = separator
       when "tag"
         descending = proc { tree.content.each { |t| format t, **opts.merge(level: opts[:level]+1) } }
