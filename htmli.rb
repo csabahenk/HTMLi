@@ -227,6 +227,43 @@ extend self
     tree.tree
   end
 
+  def _flatten_iter tree, out, layout: nil
+    case tree
+    when String
+      out << [:str, tree]
+    when Array
+      tree = findlayout tree, layout: layout
+      cat = tree.category.to_s
+      unless cat == "root"
+        out << [
+         case cat
+         when "tag"
+           :tagopen
+         when "void", "singleton"
+           ("tag" + cat).to_sym
+         when "comment"
+           :comment
+         else
+           raise "unknown token category #{cat}"
+         end,
+         tree.tag] + [tree.attr].compact
+      end
+      if %w[root tag].include? cat
+        tree.content.each { |t| _flatten_iter t, out, layout: layout }
+      end
+      if cat == "tag"
+        out << [:tagclose, tree.tag]
+      end
+    end
+    out
+  end
+
+  def flatten tree, layout: nil
+    Enumerator.new do |y|
+      _flatten_iter tree, y, layout: layout
+    end
+  end
+
   def tag_height tree, layout: nil
     unless tree.respond_to? :height=
       class << tree
