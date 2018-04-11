@@ -384,6 +384,9 @@ if __FILE__ == $0
   when "json"
     require 'json'
     JSON.load $<
+  when "yaml"
+    require 'yaml'
+    YAML.load $<
   else
     raise "unknown input format #{from}"
   end
