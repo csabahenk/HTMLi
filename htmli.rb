@@ -144,6 +144,42 @@ extend self
 
   end
 
+  class MapLayout < LayoutBase
+
+    NOTag = ""
+
+    def initialize category, tag, attr:nil, content:[]
+      @tree = self.class.makehead(category, tag, attr)
+      @tree[tag||NOTag].concat content
+    end
+
+    def category
+      tree["typ"]
+    end
+
+    def tag
+      t = (tree.keys - %w[typ attr]).first
+      t == NOTag ? nil : t
+    end
+
+    def attr
+      tree["attr"]
+    end
+
+    def self.makehead cat, tag, attr=nil
+      {"typ"=> cat, "attr"=> attr, (tag||NOTag)=>[]}.compact
+    end
+
+    def content
+      tree[tag||NOTag]
+    end
+
+    def << e
+      content << e
+    end
+
+  end
+
   def findlayout tree=nil, layout: nil
     layoutcls = case layout
     when String, Symbol
@@ -154,34 +190,41 @@ extend self
       if LayoutBase === tree
         tree.class
       else
-        case tree.size
-        when 0
-          raise "invalid tree #{tree}"
-        when 1
-          InlineLayout
-        else
-          b = tree[1]
-          case b
-          when String,Integer
+        case tree
+        when Hash
+          MapLayout
+        when Array
+          case tree.size
+          when 0
+            raise "invalid tree #{tree}"
+          when 1
             InlineLayout
-          when Array
-            case b[0]
-            # if b is Array, it's either the content container
-            # of StandardLayout or a tree that's part of inlined
-            # container of InlineLayout.
-            when nil,String,Integer
-              # b can't be tree, as trees start with an Array,
-              # so by exclusion we reach to StandardLayout
-              StandardLayout
+          else
+            b = tree[1]
+            case b
+            when String,Integer
+              InlineLayout
             when Array
-              # were b a tree, it's starting element's starting
-              # element should be a symbol/string; in the other
-              # case that's still an array
-              Array === b[0][0] ? StandardLayout : InlineLayout
-            else
-              raise "invalid tree #{tree}"
+              case b[0]
+              # if b is Array, it's either the content container
+              # of StandardLayout or a tree that's part of inlined
+              # container of InlineLayout.
+              when nil,String,Integer
+                # b can't be tree, as trees start with an Array,
+                # so by exclusion we reach to StandardLayout
+                StandardLayout
+              when Array
+                # were b a tree, it's starting element's starting
+                # element should be a symbol/string; in the other
+                # case that's still an array
+                Array === b[0][0] ? StandardLayout : InlineLayout
+              else
+                raise "invalid tree #{tree}"
+              end
             end
           end
+        else
+          raise "invalid tree type #{tree.class}"
         end
       end
     else
@@ -273,7 +316,7 @@ extend self
     tree.height = case tree
     when String
       0
-    when Array
+    when Array,Hash
       (findlayout(tree, layout: layout).content.map { |t|
          tag_height(t, layout: layout)
          t.height
@@ -295,7 +338,7 @@ extend self
         out << l
         context[:lastchr] = l[-1]
       }
-    when Array
+    when Array,Hash
       tree = findlayout tree, layout: layout
       cat = tree.category
       indenting = proc { out << indent if context[:lastchr] == separator }
@@ -344,7 +387,7 @@ extend self
           out << "</#{tree.tag}>" << separator
         end
       else
-        raise "unknown token category #{cat}"
+        raise "unknown token category #{cat.inspect}"
       end
     end
     out

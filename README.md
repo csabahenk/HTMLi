@@ -1,7 +1,7 @@
 # HTMLi - a (non-compliant) HTML parser.
 
 - pretty-indents html,
-- converts html to/from nested array representation.
+- converts html to/from JSON representation.
 
 If used from command line:
 
