@@ -1,5 +1,14 @@
 #!/usr/bin/env ruby
 
+begin
+  Hash.instance_method :compact
+rescue NameError
+  require 'polyfill'
+
+  using Polyfill(
+    Hash: %w[#compact]
+  )
+end
 
 module HTMLi
 extend self
