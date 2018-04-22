@@ -327,8 +327,10 @@ extend self
     tree
   end
 
+  FORMAT_OPTS = {separator: "\n", indent: "  ", collapse: 2, layout: nil}
+
   def format tree, **opts
-    opts = {out: $>, separator: "\n", indent: "  ", collapse: 2, layout: nil, level: 0, context:{}}.merge opts
+    opts = {out: $>, level: 0, context:{}}.merge(FORMAT_OPTS).merge opts
     out,separator,collapse,layout,context = opts.values_at(:out, :separator, :collapse, :layout, :context)
     indent = opts[:indent] * opts[:level]
     case tree
@@ -397,32 +399,16 @@ end
 
 
 if __FILE__ == $0
+  require_relative 'simpleopts'
   include HTMLi
 
-  opts = {}
-  args = []
-  while a = $*.shift
-    if a == "--"
-      break
-    elsif a =~ /\A(?:--)?([^=:]+)[=:](.*)/
-      o,v = $1,$2
-      opts[o.to_sym] = case v
-      when /\A\d+\Z/
-        Integer v
-      else
-        v
-      end
-    else
-      args << a
-    end
-  end
-
-  $*.insert(0, args).flatten!
+  opts = SimpleOpts.get([FORMAT_OPTS, format: "html", from: "html"],
+                        help_args: "[ < ] file,..")
 
   layout = opts.delete :layout
   from = opts.delete :from
   tree = case from
-  when "html", nil
+  when "html"
     mktree sanitize(tokenize($<)), layout: layout
   when "json"
     require 'json'
@@ -444,7 +430,7 @@ if __FILE__ == $0
   when %r{\A(json[:-_#@/.])?yajl\Z}
     require 'yajl'
     Yajl::Encoder.encode tree, $>
-  when "html", nil
+  when "html"
     format tag_height(tree), **opts
   else
     raise "unknown format #{format}"
