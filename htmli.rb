@@ -411,37 +411,53 @@ if __FILE__ == $0
   require_relative 'simpleopts'
   include HTMLi
 
-  opts = SimpleOpts.get([FORMAT_OPTS, format: "html", from: "html"],
+  dispatch = {
+    from: {
+      "html" => proc { |layout| mktree sanitize(tokenize($<)), layout: layout },
+      "json" => proc { |layout|
+        require 'json'
+        JSON.load $<
+      },
+      "yaml" => proc { |layout|
+        require 'yaml'
+        YAML.load $<
+      },
+    },
+    format: {
+      "json" => proc { |tree|
+        require 'json'
+        puts tree.to_json
+      },
+      "yaml" => proc { |tree|
+        require 'yaml'
+        puts tree.to_yaml
+      },
+      "yajl" => proc { |tree|
+        require 'yajl'
+        Yajl::Encoder.encode tree, $>
+      },
+      "html" => proc { |tree| format tag_height(tree), **opts },
+    }
+  }
+
+  Opt = SimpleOpts::Opt
+  htmlopts = FORMAT_OPTS.merge layout: Opt.new(
+    default: 'standard',
+    info: "%{default} (of #{HTMLi.constants.grep(/Layout\Z/).map {|c| c.to_s.sub(/Layout\Z/, "").downcase }.join ","})"
+  )
+
+  mkchoices = proc { |key| dispatch[key].keys.sort.join "," }
+  opts = SimpleOpts.get([htmlopts,
+                         %i[format from].map { |key|
+                           [key,
+                            Opt.new(default: "html", info: "%{default} (of #{mkchoices[key]})")]
+                         }.to_h],
                         help_args: "[ < ] file,..")
 
-  layout = opts.delete :layout
-  from = opts.delete :from
-  tree = case from
-  when "html"
-    mktree sanitize(tokenize($<)), layout: layout
-  when "json"
-    require 'json'
-    JSON.load $<
-  when "yaml"
-    require 'yaml'
-    YAML.load $<
-  else
-    raise "unknown input format #{from}"
+  cbks = dispatch.map { |key,table| [key, table[opts.delete key]] }.to_h
+  cbks.each do |key,cbk|
+    cbk or  raise "--#{key}: should be one of #{mkchoices[key]}"
   end
 
-  case opts.delete :format
-  when "json"
-    require 'json'
-    puts tree.to_json
-  when "yaml"
-    require 'yaml'
-    puts tree.to_yaml
-  when %r{\A(json[:-_#@/.])?yajl\Z}
-    require 'yajl'
-    Yajl::Encoder.encode tree, $>
-  when "html"
-    format tag_height(tree), **opts
-  else
-    raise "unknown format #{format}"
-  end
+  cbks[:format].call cbks[:from].call(opts.delete :layout)
 end
