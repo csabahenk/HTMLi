@@ -121,7 +121,7 @@ extend self
 
   end
 
-  class StandardLayout < LayoutBase
+  class NestedLayout < LayoutBase
 
     def initialize category, tag, attr:nil, content:[]
       @tree = [self.class.makehead(category, tag, attr), content]
@@ -216,17 +216,17 @@ extend self
             when Array
               case b[0]
               # if b is Array, it's either the content container
-              # of StandardLayout or a tree that's part of inlined
+              # of NestedLayout or a tree that's part of inlined
               # container of InlineLayout.
               when nil,String,Integer
                 # b can't be tree, as trees start with an Array,
-                # so by exclusion we reach to StandardLayout
-                StandardLayout
+                # so by exclusion we reach to NestedLayout
+                NestedLayout
               when Array
                 # were b a tree, it's starting element's starting
                 # element should be a symbol/string; in the other
                 # case that's still an array
-                Array === b[0][0] ? StandardLayout : InlineLayout
+                Array === b[0][0] ? NestedLayout : InlineLayout
               else
                 raise "invalid tree #{tree}"
               end
@@ -254,7 +254,7 @@ extend self
   end
 
   def mktree tokens, layout:nil
-    _LO = findlayout layout: (layout||StandardLayout)
+    _LO = findlayout layout: (layout||NestedLayout)
     tree = _LO.new :root, nil
     cursor = [tree]
     tokens.each { |t|
@@ -422,7 +422,7 @@ if __FILE__ == $0
         require 'yaml'
         YAML.load $<
       },
-      "yajl" => proc { |layout|
+      "json/yajl" => proc { |layout|
         require 'yajl'
         $*.size <= 1 or raise "Yajl does not support muliple input files"
         ($*.empty? ?
@@ -430,35 +430,35 @@ if __FILE__ == $0
          proc { |&b| open($*.first, &b) }).call { |f| Yajl::Parser.parse f }
       }
     },
-    format: {
-      "json" => proc { |tree|
+    to: {
+      "json" => proc { |tree,opts|
         require 'json'
         puts tree.to_json
       },
-      "yaml" => proc { |tree|
+      "yaml" => proc { |tree,opts|
         require 'yaml'
         puts tree.to_yaml
       },
-      "yajl" => proc { |tree|
+      "json/yajl" => proc { |tree,opts|
         require 'yajl'
         Yajl::Encoder.encode tree, $>
       },
-      "html" => proc { |tree| format tag_height(tree), **opts },
+      "html" => proc { |tree,opts| format tag_height(tree), **opts },
     }
   }
 
   Opt = SimpleOpts::Opt
   htmlopts = FORMAT_OPTS.merge layout: Opt.new(
-    default: 'standard',
+    default: 'map',
     info: "%{default} (of #{HTMLi.constants.grep(/Layout\Z/).map {|c| c.to_s.sub(/Layout\Z/, "").downcase }.join ","})"
   )
 
   mkchoices = proc { |key| dispatch[key].keys.sort.join "," }
-  opts = SimpleOpts.get([htmlopts,
-                         %i[format from].map { |key|
+  opts = SimpleOpts.get([dispatch.keys.map { |key|
                            [key,
                             Opt.new(default: "html", info: "%{default} (of #{mkchoices[key]})")]
-                         }.to_h],
+                         }.to_h,
+                         htmlopts],
                         help_args: "[ < ] file,..")
 
   cbks = dispatch.map { |key,table| [key, table[opts.delete key]] }.to_h
@@ -466,5 +466,5 @@ if __FILE__ == $0
     cbk or  raise "--#{key}: should be one of #{mkchoices[key]}"
   end
 
-  cbks[:format].call cbks[:from].call(opts.delete :layout)
+  cbks[:to].call cbks[:from].call(opts.delete :layout), opts
 end
