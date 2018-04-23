@@ -422,6 +422,13 @@ if __FILE__ == $0
         require 'yaml'
         YAML.load $<
       },
+      "yajl" => proc { |layout|
+        require 'yajl'
+        $*.size <= 1 or raise "Yajl does not support muliple input files"
+        ($*.empty? ?
+         proc { |&b| b[STDIN] } :
+         proc { |&b| open($*.first, &b) }).call { |f| Yajl::Parser.parse f }
+      }
     },
     format: {
       "json" => proc { |tree|
