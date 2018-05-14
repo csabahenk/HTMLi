@@ -6,7 +6,14 @@ class SimpleOpts
   class Opt
 
     def self.classfixer c
-      (Class === c and c.name == "Fixnum") ? Integer : c
+      case c.name
+      when "Fixnum"
+        Integer
+      when "FalseClass"
+        TrueClass
+      else
+        c
+      end
     end
 
     def self.represent v
