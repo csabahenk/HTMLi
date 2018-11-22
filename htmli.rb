@@ -358,7 +358,7 @@ extend self
         tree.content.each { |t| format t, **opts }
       when "void", "singleton"
         indenting[]
-        out << "<#{[tree.tag, tree.attr].compact.join(" ")}#{cat == :singleton ? "/" : ""}>"
+        out << "<#{[tree.tag, tree.attr].compact.join(" ")}#{cat.to_s == "singleton" ? "/" : ""}>"
         context[:lastchr] = nil
       when "comment"
         indenting[]
