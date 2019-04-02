@@ -254,7 +254,7 @@ extend self
   end
 
   def mktree tokens, layout:nil
-    _LO = findlayout layout: (layout||NestedLayout)
+    _LO = findlayout layout: (layout||MapLayout)
     tree = _LO.new :root, nil
     cursor = [tree]
     tokens.each { |t|
@@ -277,6 +277,10 @@ extend self
     }
     raise "non-sanitized tokens" unless cursor == [tree]
     tree.tree
+  end
+
+  def parse src, **opts
+    mktree sanitize(tokenize src), **opts
   end
 
   def _flatten_iter tree, out, layout: nil
@@ -336,12 +340,15 @@ extend self
     tree
   end
 
-  FORMAT_OPTS = {separator: "\n", indent: "  ", collapse: 2, layout: nil}
+  FORMAT_OPTS = {separator: "\n", indent: "  ", collapse: nil, layout: nil}
 
   def format tree, **opts
     opts = {out: $>, level: 0, context:{}}.merge(FORMAT_OPTS).merge opts
     out,separator,collapse,layout,context = opts.values_at(:out, :separator, :collapse, :layout, :context)
     indent = opts[:indent] * opts[:level]
+    if collapse and !tree.respond_to? :height
+      tree = tag_height(tree)
+    end
     case tree
     when String
       tree.each_line { |l|
@@ -373,7 +380,7 @@ extend self
             break
           end
         }
-        if height and height <= collapse
+        if collapse and height and height <= collapse
           indenting[]
           out << "<#{[tree.tag, tree.attr].compact.join(" ")}>"
           context[:lastchr] = nil
@@ -413,7 +420,7 @@ if __FILE__ == $0
 
   dispatch = {
     from: {
-      "html" => proc { |layout| mktree sanitize(tokenize($<)), layout: layout },
+      "html" => proc { |layout| parse $<, layout: layout },
       "json" => proc { |layout|
         require 'json'
         JSON.load $<
@@ -443,12 +450,12 @@ if __FILE__ == $0
         require 'yajl'
         Yajl::Encoder.encode tree, $>
       },
-      "html" => proc { |tree,opts| format tag_height(tree), **opts },
+      "html" => proc { |tree,opts| format tree, **opts },
     }
   }
 
   Opt = SimpleOpts::Opt
-  htmlopts = FORMAT_OPTS.merge layout: Opt.new(
+  htmlopts = FORMAT_OPTS.merge collapse: 2, layout: Opt.new(
     default: 'map',
     info: "%{default} (of #{HTMLi.constants.grep(/Layout\Z/).map {|c| c.to_s.sub(/Layout\Z/, "").downcase }.join ","})"
   )
