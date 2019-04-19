@@ -79,6 +79,7 @@ extend self
   def sanitize tokens
     tstack = []
     voids = []
+    orphans = []
     tokens.each { |t|
       case t[0]
       when :str,:tagsingleton,:comment
@@ -89,13 +90,14 @@ extend self
           break if to[1] == t[1]
           voids << to
         end
-        raise "missing opening for #{t[1]}" unless to
+        orphans << t unless to
       else
         raise "unknown token category #{t[0]}"
       end
     }
     voids.concat tstack
     voids.each { |t| t[0] = :tagvoid }
+    orphans.each { |t| t[0] = :tagorphan }
     tokens
   end
 
@@ -267,7 +269,7 @@ extend self
         cursor[-1] << case cat
         when :str
           payload[0]
-        when :tagsingleton, :tagvoid, :comment
+        when :tagsingleton, :tagvoid, :tagorphan, :comment
           _LO.new(cat.to_s.sub(/^tag/,"").to_sym, payload[0], attr: payload[1]).tree
         when :tagopen
           cursor << _LO.new(:tag, payload[0], attr: payload[1])
@@ -295,7 +297,7 @@ extend self
          case cat
          when "tag"
            :tagopen
-         when "void", "singleton"
+         when "void", "singleton", "orphan"
            ("tag" + cat).to_sym
          when "comment"
            :comment
@@ -366,6 +368,10 @@ extend self
       when "void", "singleton"
         indenting[]
         out << "<#{[tree.tag, tree.attr].compact.join(" ")}#{cat.to_s == "singleton" ? "/" : ""}>"
+        context[:lastchr] = nil
+      when "orphan"
+        indenting[]
+        out << "</#{[tree.tag, tree.attr].compact.join(" ")}>"
         context[:lastchr] = nil
       when "comment"
         indenting[]
