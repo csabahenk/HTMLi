@@ -14,6 +14,10 @@ module HTMLi
 extend self
 
   def pretokenize src
+    unless block_given?
+      return to_enum(:pretokenize, src)
+    end
+
     tok = ""
     cat = :str
     eci = src.instance_eval { respond_to?(:each_char) ? each_char : each }
