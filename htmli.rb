@@ -52,7 +52,7 @@ extend self
           end
         end
       rescue StopIteration
-        yield cat, tok unless tok =~ /\A\s*\Z/m
+        yield :str, tok unless tok =~ /\A\s*\Z/m
         break
       end
     end
