@@ -154,6 +154,24 @@ class SimpleOpts
     nil
   end
 
+  private def supress_unshortopts
+    unshortopts = @opts.map { |o,w| w[:opt].name[0] } - @shortopts
+    unshortopts.each { |o|
+      o == ?h and next
+      sw = @optionparser.make_switch([?-+o], proc { raise OptionParser::InvalidOption, ?-+o })[0]
+      class << sw
+        def summarize *x
+        end
+      end
+      @optionparser.top.append sw
+    }
+    if unshortopts.include? ?h
+      @optionparser.instance_variable_get(:@stack).then {|s|
+        s << s.find {|l| l.long.key? "help" }
+      }
+    end
+  end
+
   def parse argv
     @optionparser.parse! argv
   end
@@ -185,6 +203,7 @@ class SimpleOpts
       optclass: Opt, help_args: nil
     simpleopts = new(help_args: help_args)
     [inopts].flatten.each { |oh| simpleopts.add_opts(oh, optclass: optclass) }
+    simpleopts.send :supress_unshortopts
     simpleopts.parse argv
     conf_opt and simpleopts.conf(conf_opt, keep_conf_opt: keep_conf_opt)
     simpleopts.emit
