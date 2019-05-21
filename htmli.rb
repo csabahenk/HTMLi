@@ -105,6 +105,20 @@ extend self
     tokens
   end
 
+  ORPHAN_STRATEGIES = {
+    allow: proc { |t| t },
+    ignore: proc { },
+    raise: proc { |t| raise "missing opening for #{t[1]}" },
+    warn: proc { |t| STDERR.puts "warning: missing opening for #{t[1]}"; t },
+  }
+
+  def filter_orphans tokens, strategy
+    strategy ||= :raise
+    strategy_cbk = ORPHAN_STRATEGIES[strategy.to_sym]
+    strategy_cbk or  raise "unkown orphan strategy #{strategy.inspect}"
+    tokens.map { |t| t[0] == :tagorphan ? strategy_cbk[t] : t }.compact
+  end
+
   class LayoutBase
 
     attr_reader :tree
@@ -286,7 +300,9 @@ extend self
   end
 
   def parse src, **opts
-    mktree sanitize(tokenize src), **opts
+    mktree(filter_orphans(sanitize(tokenize src),
+                          opts.delete(:orphan_strategy)),
+           **opts)
   end
 
   def _flatten_iter tree, out, layout: nil
@@ -472,6 +488,10 @@ if __FILE__ == $0
       layout: Opt.new(
         default: 'map',
         info: "%{default} (of #{HTMLi.constants.grep(/Layout\Z/).map {|c| c.to_s.sub(/Layout\Z/, "").downcase }.join ","})"
+      ),
+      orphan_strategy: Opt.new(
+        default: "raise",
+        info: "%{default} (of #{ORPHAN_STRATEGIES.keys.join(?,)})"
       ),
     },
     dispatch_opts: dispatch.keys.map { |key|
