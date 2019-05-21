@@ -90,11 +90,17 @@ extend self
       when :tagopen
         tstack << t
       when :tagclose
-        while to = tstack.pop
-          break if to[1] == t[1]
-          voids << to
+        i = tstack.size-1
+        while i>=0
+          break if tstack[i][1] == t[1]
+          i-=1
         end
-        orphans << t unless to
+        if i>=0
+          voids.concat tstack[i+1..-1]
+          tstack = tstack[0...i]
+        else
+          orphans << t
+        end
       else
         raise "unknown token category #{t[0]}"
       end
