@@ -430,16 +430,16 @@ if __FILE__ == $0
 
   dispatch = {
     from: {
-      "html" => proc { |layout| parse $<, layout: layout },
-      "json" => proc { |layout|
+      "html" => proc { |opts| parse $<, **opts },
+      "json" => proc { |opts|
         require 'json'
         JSON.load $<
       },
-      "yaml" => proc { |layout|
+      "yaml" => proc { |opts|
         require 'yaml'
         YAML.load $<
       },
-      "json/yajl" => proc { |layout|
+      "json/yajl" => proc { |opts|
         require 'yajl'
         $*.size <= 1 or raise "Yajl does not support muliple input files"
         ($*.empty? ?
@@ -465,23 +465,28 @@ if __FILE__ == $0
   }
 
   Opt = SimpleOpts::Opt
-  htmlopts = FORMAT_OPTS.merge collapse: 2, layout: Opt.new(
-    default: 'map',
-    info: "%{default} (of #{HTMLi.constants.grep(/Layout\Z/).map {|c| c.to_s.sub(/Layout\Z/, "").downcase }.join ","})"
-  )
-
   mkchoices = proc { |key| dispatch[key].keys.sort.join "," }
-  opts = SimpleOpts.get([dispatch.keys.map { |key|
-                           [key,
-                            Opt.new(default: "html", info: "%{default} (of #{mkchoices[key]})")]
-                         }.to_h,
-                         htmlopts],
-                        help_args: "[ < ] file,..")
+  opttable = {
+    to_opts: FORMAT_OPTS.compact.merge(collapse: 2),
+    from_opts: {
+      layout: Opt.new(
+        default: 'map',
+        info: "%{default} (of #{HTMLi.constants.grep(/Layout\Z/).map {|c| c.to_s.sub(/Layout\Z/, "").downcase }.join ","})"
+      ),
+    },
+    dispatch_opts: dispatch.keys.map { |key|
+      [key,
+      Opt.new(default: "html", info: "%{default} (of #{mkchoices[key]})")]
+    }.to_h
+  }
 
-  cbks = dispatch.map { |key,table| [key, table[opts.delete key]] }.to_h
+  opts = SimpleOpts.get(opttable.values, help_args: "[ < ] file,..")
+  optvalues = opttable.transform_values { |h| opts.select { |k| h.key? k }}
+
+  cbks = dispatch.map { |key,table| [key, table[optvalues[:dispatch_opts][key]]] }.to_h
   cbks.each do |key,cbk|
     cbk or  raise "--#{key}: should be one of #{mkchoices[key]}"
   end
 
-  cbks[:to].call cbks[:from].call(opts.delete :layout), opts
+  cbks[:to].call cbks[:from].call(optvalues[:from_opts]), optvalues[:to_opts]
 end
