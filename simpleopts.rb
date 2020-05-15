@@ -196,13 +196,18 @@ class SimpleOpts
       Class === v and missing(w[:opt].name)
       opts[o] = v
     }
-    opts
+    Struct.new(*opts.keys)[*opts.values]
   end
 
-  def self.get inopts, argv: $*, conf_opt: nil, keep_conf_opt: false,
-      optclass: Opt, help_args: nil
-    simpleopts = new(help_args: help_args)
-    [inopts].flatten.each { |oh| simpleopts.add_opts(oh, optclass: optclass) }
+  def self.get *a
+    self.get_args a
+  end
+
+  def self.get_args inopts, argv: $*, conf_opt: nil, keep_conf_opt: false,
+      optclass: Opt
+    help_args_list,inopts = inopts.flatten.partition { |e| String === e }
+    simpleopts = new(help_args: help_args_list.empty? ? nil : help_args_list.join(" "))
+    inopts.each { |oh| simpleopts.add_opts(oh, optclass: optclass) }
     simpleopts.send :supress_unshortopts
     simpleopts.parse argv
     conf_opt and simpleopts.conf(conf_opt, keep_conf_opt: keep_conf_opt)

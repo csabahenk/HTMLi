@@ -506,8 +506,8 @@ if __FILE__ == $0
     }.to_h
   }
 
-  opts = SimpleOpts.get(opttable.values, help_args: "[ < ] file,..")
-  optvalues = opttable.transform_values { |h| opts.select { |k| h.key? k }}
+  opts = SimpleOpts.get(opttable.values, "[ < ] file,..")
+  optvalues = opttable.transform_values { |h| opts.to_h.select { |k| h.key? k }}
 
   cbks = dispatch.map { |key,table| [key, table[optvalues[:dispatch_opts][key]]] }.to_h
   cbks.each do |key,cbk|
