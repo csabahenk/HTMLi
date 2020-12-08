@@ -412,7 +412,7 @@ extend self
             break
           end
         }
-        if collapse and height and height <= collapse
+        if collapse and (collapse < 0 or (height and height <= collapse))
           indenting[]
           out << "<#{[tree.tag, tree.attr].compact.join(" ")}>"
           context[:lastchr] = nil
